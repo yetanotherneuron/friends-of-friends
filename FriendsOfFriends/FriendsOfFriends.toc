@@ -1,0 +1,17 @@
+## Author: yetanotherneuron
+## Interface: 30300
+## Title: |cFFC040FF<YAN>|r |cFFFF4D94Friends|r |cFFFFFFFFOf|r |cFFFF4D94Friends|r
+## Notes: Share friends and ignores across alts on the same realm and faction. Type /fof for help.
+## Version: 1.0.0
+## SavedVariables: FOF_DB
+Core\palette.lua
+Core\config.lua
+Locales\enUS.lua
+Locales\locale.lua
+Modules\friends.lua
+Modules\ignores.lua
+Modules\prompt.lua
+Modules\commands.lua
+Core\core.lua
+UI\confirm.lua
+Core\frame.xml
