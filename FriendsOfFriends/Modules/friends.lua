@@ -23,8 +23,8 @@ function FOF.CurrentFriends()
 	local cur = {}
 	local n = GetNumFriends()
 	for i = 1, n do
-		local name = GetFriendInfo(i)
-		if name and name ~= UNKNOWN then
+		local name = FOF.NormalizeName(GetFriendInfo(i))
+		if name then
 			cur[name] = name
 		end
 	end
@@ -34,7 +34,7 @@ end
 function FOF.FriendsDiff()
 	local key = FOF.sessionKey
 	local cur = FOF.CurrentFriends()
-	local player = UnitName("player")
+	local player = FOF.NormalizeName(UnitName("player"))
 	local globalFriends = FOF.Bucket("friends", key) or {}
 	local removed = FOF.Bucket("removedFriends", key) or {}
 	local alts = FOF.Bucket("alts", key) or {}
@@ -42,13 +42,15 @@ function FOF.FriendsDiff()
 	local toAdd = 0
 	local toRemove = 0
 
-	for _, name in pairs(globalFriends) do
-		if name ~= player and not cur[name] and not removed[name] and not alts[name] then
+	for _, raw in pairs(globalFriends) do
+		local name = FOF.NormalizeName(raw)
+		if name and name ~= player and not cur[name] and not removed[name] and not alts[name] then
 			toAdd = toAdd + 1
 		end
 	end
-	for _, name in pairs(removed) do
-		if name ~= player and cur[name] and not alts[name] then
+	for _, raw in pairs(removed) do
+		local name = FOF.NormalizeName(raw)
+		if name and name ~= player and cur[name] and not alts[name] then
 			toRemove = toRemove + 1
 		end
 	end
@@ -94,7 +96,7 @@ end
 function FOF.ClearLocalFriends()
 	local key = FOF.sessionKey
 	local cur = FOF.CurrentFriends()
-	local player = UnitName("player")
+	local player = FOF.NormalizeName(UnitName("player"))
 	local alts = FOF.Bucket("alts", key) or {}
 	local autoAlts = FOF.Get("autoAlts")
 	local removed = 0
@@ -111,29 +113,32 @@ end
 function FOF.ProcessAlts(curFriends)
 	local key = FOF.sessionKey
 	curFriends = curFriends or FOF.CurrentFriends()
-	local player = UnitName("player")
+	local player = FOF.NormalizeName(UnitName("player"))
 	local alts = FOF.Bucket("alts", key)
 	local friends = FOF.Bucket("friends", key)
 	local removed = FOF.Bucket("removedFriends", key)
 	local autoAlts = FOF.Get("autoAlts")
 
-	for _, name in pairs(alts) do
-		if autoAlts then
-			if name ~= player and not curFriends[name] then
-				FOF.VerbosePrintKey("FRIENDS_AUTO_ALT_ADD", name)
-				AddFriend(name)
+	for _, raw in pairs(alts) do
+		local name = FOF.NormalizeName(raw)
+		if name then
+			if autoAlts then
+				if name ~= player and not curFriends[name] then
+					FOF.VerbosePrintKey("FRIENDS_AUTO_ALT_ADD", name)
+					AddFriend(name)
+				end
+			else
+				if name ~= player and curFriends[name] then
+					FOF.VerbosePrintKey("FRIENDS_AUTO_ALT_REMOVE", name)
+					RemoveFriend(name)
+				end
 			end
-		else
-			if name ~= player and curFriends[name] then
-				FOF.VerbosePrintKey("FRIENDS_AUTO_ALT_REMOVE", name)
-				RemoveFriend(name)
-			end
+			friends[name] = nil
+			removed[name] = nil
 		end
-		friends[name] = nil
-		removed[name] = nil
 	end
 
-	if not alts[player] then
+	if player and not alts[player] then
 		FOF.VerbosePrintKey("FRIENDS_ALT_REGISTER")
 		alts[player] = player
 	end
@@ -142,7 +147,7 @@ end
 function FOF.ImportFriends()
 	local key = FOF.sessionKey
 	local cur = FOF.CurrentFriends()
-	local player = UnitName("player")
+	local player = FOF.NormalizeName(UnitName("player"))
 	local numFriends = GetNumFriends()
 	local added = 0
 	local skipped = 0
@@ -154,8 +159,11 @@ function FOF.ImportFriends()
 
 	-- snapshot names to avoid mutating while iterating
 	local removeList = {}
-	for _, name in pairs(globalRemoves) do
-		removeList[#removeList + 1] = name
+	for _, raw in pairs(globalRemoves) do
+		local name = FOF.NormalizeName(raw)
+		if name then
+			removeList[#removeList + 1] = name
+		end
 	end
 	for _, name in ipairs(removeList) do
 		if name ~= player and cur[name] and not alts[name] then
@@ -167,8 +175,11 @@ function FOF.ImportFriends()
 	end
 
 	local addList = {}
-	for _, name in pairs(globalFriends) do
-		addList[#addList + 1] = name
+	for _, raw in pairs(globalFriends) do
+		local name = FOF.NormalizeName(raw)
+		if name then
+			addList[#addList + 1] = name
+		end
 	end
 	for _, name in ipairs(addList) do
 		if name ~= player and not cur[name] and not globalRemoves[name] and not alts[name] then
@@ -203,18 +214,21 @@ function FOF.UpdateGlobalFriends(friendsList)
 	local removed = FOF.Bucket("removedFriends", key)
 	local alts = FOF.Bucket("alts", key)
 
-	for _, name in pairs(friendsList) do
-		if pendingFriendAdds[name] then
-			pendingFriendAdds[name] = nil
-		end
-		if
-			not friendsAtLogin[name]
-			and not friends[name]
-			and not removed[name]
-			and not alts[name]
-		then
-			FOF.VerbosePrintKey("FRIENDS_ADD_GLOBAL", name)
-			friends[name] = name
+	for _, raw in pairs(friendsList) do
+		local name = FOF.NormalizeName(raw)
+		if name then
+			if pendingFriendAdds[name] then
+				pendingFriendAdds[name] = nil
+			end
+			if
+				not friendsAtLogin[name]
+				and not friends[name]
+				and not removed[name]
+				and not alts[name]
+			then
+				FOF.VerbosePrintKey("FRIENDS_ADD_GLOBAL", name)
+				friends[name] = name
+			end
 		end
 	end
 end
@@ -224,7 +238,7 @@ function FOF.OnFriendsEnteringWorld()
 	sessionReady = false
 	friendsAtLogin = {}
 	pendingFriendAdds = {}
-	savedPlayerName = UnitName("player")
+	savedPlayerName = FOF.NormalizeName(UnitName("player"))
 	FOF.EnsureBuckets(key)
 end
 

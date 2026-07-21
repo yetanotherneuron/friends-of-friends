@@ -20,8 +20,8 @@ function FOF.CurrentIgnores()
 	local cur = {}
 	local n = GetNumIgnores()
 	for i = 1, n do
-		local name = GetIgnoreName(i)
-		if name and name ~= UNKNOWN then
+		local name = FOF.NormalizeName(GetIgnoreName(i))
+		if name then
 			cur[name] = name
 		end
 	end
@@ -31,20 +31,22 @@ end
 function FOF.IgnoresDiff()
 	local key = FOF.sessionKey
 	local cur = FOF.CurrentIgnores()
-	local player = UnitName("player")
+	local player = FOF.NormalizeName(UnitName("player"))
 	local globalIgnores = FOF.Bucket("ignores", key) or {}
 	local removed = FOF.Bucket("removedIgnores", key) or {}
 
 	local toAdd = 0
 	local toRemove = 0
 
-	for _, name in pairs(globalIgnores) do
-		if name ~= player and not cur[name] and not removed[name] then
+	for _, raw in pairs(globalIgnores) do
+		local name = FOF.NormalizeName(raw)
+		if name and name ~= player and not cur[name] and not removed[name] then
 			toAdd = toAdd + 1
 		end
 	end
-	for _, name in pairs(removed) do
-		if name ~= player and cur[name] then
+	for _, raw in pairs(removed) do
+		local name = FOF.NormalizeName(raw)
+		if name and name ~= player and cur[name] then
 			toRemove = toRemove + 1
 		end
 	end
@@ -98,7 +100,7 @@ end
 function FOF.ImportIgnores()
 	local key = FOF.sessionKey
 	local cur = FOF.CurrentIgnores()
-	local player = UnitName("player")
+	local player = FOF.NormalizeName(UnitName("player"))
 	local added = 0
 	local removedCount = 0
 
@@ -107,8 +109,11 @@ function FOF.ImportIgnores()
 
 	-- remove first (same order as friends import)
 	local removeList = {}
-	for _, name in pairs(globalRemoves) do
-		removeList[#removeList + 1] = name
+	for _, raw in pairs(globalRemoves) do
+		local name = FOF.NormalizeName(raw)
+		if name then
+			removeList[#removeList + 1] = name
+		end
 	end
 	for _, name in ipairs(removeList) do
 		if name ~= player and cur[name] then
@@ -120,8 +125,11 @@ function FOF.ImportIgnores()
 	end
 
 	local addList = {}
-	for _, name in pairs(globalIgnores) do
-		addList[#addList + 1] = name
+	for _, raw in pairs(globalIgnores) do
+		local name = FOF.NormalizeName(raw)
+		if name then
+			addList[#addList + 1] = name
+		end
 	end
 	for _, name in ipairs(addList) do
 		if name ~= player and not cur[name] and not globalRemoves[name] then
@@ -146,8 +154,9 @@ function FOF.UpdateGlobalIgnores(ignoresList)
 	local ignores = FOF.Bucket("ignores", key)
 	local removed = FOF.Bucket("removedIgnores", key)
 
-	for _, name in pairs(ignoresList) do
-		if not ignoresAtLogin[name] and not ignores[name] and not removed[name] then
+	for _, raw in pairs(ignoresList) do
+		local name = FOF.NormalizeName(raw)
+		if name and not ignoresAtLogin[name] and not ignores[name] and not removed[name] then
 			FOF.VerbosePrintKey("IGNORES_ADD_GLOBAL", name)
 			ignores[name] = name
 		end

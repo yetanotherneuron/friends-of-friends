@@ -4,12 +4,20 @@ FOF = FOF or {}
 local askedThisSession = false
 local seededThisLogin = false
 local awaitingLists = false
+local loginGateDone = false
+local settleElapsed = 0
+local SETTLE_SECONDS = 0.75
 
 function FOF.ResetSessionState()
 	askedThisSession = false
 	seededThisLogin = false
 	awaitingLists = false
+	loginGateDone = false
+	settleElapsed = 0
 	FOF.sessionKey = nil
+	if FOF_Frame then
+		FOF_Frame:SetScript("OnUpdate", nil)
+	end
 end
 
 function FOF.MarkAskedThisSession()
@@ -23,6 +31,7 @@ end
 function FOF.SyncAll()
 	FOF.MarkAskedThisSession()
 	FOF.HideSyncConfirm()
+	FOF.ClearKeepSkip(FOF.CharKey())
 	FOF.ImportFriends()
 	FOF.ImportIgnores()
 end
@@ -30,6 +39,7 @@ end
 function FOF.KeepLocal()
 	FOF.MarkAskedThisSession()
 	FOF.HideSyncConfirm()
+	FOF.RememberKeepSkip()
 	if not FOF.Get("quiet") then
 		FOF.PrintKey("KEEP_DONE")
 	end
@@ -52,9 +62,16 @@ function FOF.MaybeShowSyncPrompt()
 		return
 	end
 
+	-- Keep: skip while shared lists match the signature saved at Keep time
+	if FOF.ShouldSkipKeepPrompt() then
+		askedThisSession = true
+		return
+	end
+
 	local hasDiff, fAdd, fRemove, iAdd, iRemove = FOF.HasListDiff()
 	if not hasDiff then
 		askedThisSession = true
+		FOF.ClearKeepSkip(FOF.CharKey())
 		return
 	end
 
@@ -67,6 +84,11 @@ local function finishListGate()
 		return
 	end
 	awaitingLists = false
+	loginGateDone = true
+	settleElapsed = 0
+	if FOF_Frame then
+		FOF_Frame:SetScript("OnUpdate", nil)
+	end
 
 	if seededThisLogin then
 		-- list is populated — refresh the seed from real data once
@@ -80,8 +102,38 @@ local function finishListGate()
 	FOF.MaybeShowSyncPrompt()
 end
 
+local function onSettleUpdate(self, elapsed)
+	if not awaitingLists then
+		self:SetScript("OnUpdate", nil)
+		return
+	end
+	settleElapsed = settleElapsed + (elapsed or 0)
+	if settleElapsed >= SETTLE_SECONDS then
+		finishListGate()
+	end
+end
+
+local function bumpListSettle()
+	if not awaitingLists then
+		return
+	end
+	-- debounce: wait until friend/ignore updates stop arriving
+	settleElapsed = 0
+	if FOF_Frame then
+		FOF_Frame:SetScript("OnUpdate", onSettleUpdate)
+	else
+		finishListGate()
+	end
+end
+
 function FOF.OnPromptEnteringWorld()
 	FOF.sessionKey = FOF.RealmFaction()
+
+	-- zoning / second PEW: do not reset friendsAtLogin or re-prompt
+	if loginGateDone then
+		return
+	end
+
 	FOF.OnFriendsEnteringWorld()
 	FOF.OnIgnoresEnteringWorld()
 
@@ -94,22 +146,24 @@ function FOF.OnPromptEnteringWorld()
 		FOF.PrintKey("SEED_DONE")
 	end
 
-	-- wait for list update before sessionReady / prompt
+	-- wait for list updates to settle before sessionReady / prompt
 	awaitingLists = true
+	settleElapsed = 0
 	ShowFriends()
+	bumpListSettle()
 end
 
 function FOF.OnPromptFriendListUpdate()
 	if awaitingLists then
-		finishListGate()
+		bumpListSettle()
 		return
 	end
 	FOF.OnFriendListUpdate()
 end
 
 function FOF.OnPromptIgnoreListUpdate()
-	-- don't finish the login gate here — friends list may still be empty
 	if awaitingLists then
+		bumpListSettle()
 		return
 	end
 	FOF.OnIgnoreListUpdate()
